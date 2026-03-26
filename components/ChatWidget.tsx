@@ -7,7 +7,16 @@ interface Message {
   content: string
 }
 
-type Step = 'language' | 'menu' | 'chat' | 'quote' | 'contact'
+type Step = 'language' | 'menu' | 'destinations' | 'chat' | 'quote' | 'contact'
+
+const DESTINATION_OPTIONS = [
+  { region: 'Scandinavia', items: ['Danmark', 'Sverige', 'Norge', 'Finland'] },
+  { region: 'Southern Europe', items: ['Spanien', 'Portugal', 'Italien', 'Frankrig', 'Grækenland', 'Cypern'] },
+  { region: 'Turkey & North Africa', items: ['Tyrkiet', 'Marokko', 'Egypten'] },
+  { region: 'Central Europe', items: ['Tyskland', 'Tjekkiet', 'Østrig', 'Bulgarien'] },
+  { region: 'British Isles', items: ['England', 'Skotland', 'Irland'] },
+  { region: 'Exotic', items: ['Thailand', 'Bali', 'Mauritius', 'Sydafrika', 'De Kanariske Øer'] },
+]
 
 export default function ChatWidget() {
   const [open, setOpen] = useState(false)
@@ -19,6 +28,8 @@ export default function ChatWidget() {
   const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`)
   const [showLeadForm, setShowLeadForm] = useState(false)
   const [leadSubmitted, setLeadSubmitted] = useState(false)
+  const [selectedDestinations, setSelectedDestinations] = useState<string[]>([])
+  const [customDestination, setCustomDestination] = useState('')
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -33,6 +44,37 @@ export default function ChatWidget() {
   function chooseLanguage(lang: 'da' | 'en') {
     setLanguage(lang)
     setStep('menu')
+  }
+
+  function goToDestinations() {
+    setSelectedDestinations([])
+    setCustomDestination('')
+    setStep('destinations')
+  }
+
+  function toggleDestination(dest: string) {
+    setSelectedDestinations(prev =>
+      prev.includes(dest) ? prev.filter(d => d !== dest) : [...prev, dest]
+    )
+  }
+
+  function submitDestinations() {
+    const all = [...selectedDestinations]
+    if (customDestination.trim()) all.push(customDestination.trim())
+
+    let prompt: string
+    if (all.length === 0) {
+      prompt = language === 'en'
+        ? "I'm open to suggestions for a golf trip destination"
+        : 'Jeg er aaben for forslag til golfrejse-destination'
+    } else {
+      prompt = language === 'en'
+        ? `I'm interested in a golf trip to: ${all.join(', ')}`
+        : `Jeg er interesseret i en golfrejse til: ${all.join(', ')}`
+    }
+
+    setStep('chat')
+    setTimeout(() => sendMessage(prompt), 200)
   }
 
   function goToChat(prompt?: string) {
@@ -237,9 +279,9 @@ export default function ChatWidget() {
           <div className="py-6 px-4">
             <p className="text-center text-sm font-semibold text-ng-dark mb-4">{t('Hvordan kan vi hjaelpe?', 'How can we help?')}</p>
             <div className="space-y-2">
-              <button onClick={() => goToChat(t('Jeg vil gerne finde en golfrejse', 'I want to find a golf trip'))} className="w-full flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-ng-pink/5 hover:border-ng-pink border border-gray-200 transition-all text-left">
+              <button onClick={goToDestinations} className="w-full flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-ng-pink/5 hover:border-ng-pink border border-gray-200 transition-all text-left">
                 <span className="text-xl">🔍</span>
-                <div><div className="font-semibold text-ng-dark text-sm">{t('Find en golfrejse', 'Find a golf trip')}</div><div className="text-xs text-ng-gray-mid">{t('Soeg destinationer og resorts', 'Search destinations & resorts')}</div></div>
+                <div><div className="font-semibold text-ng-dark text-sm">{t('Find en golfrejse', 'Find a golf trip')}</div><div className="text-xs text-ng-gray-mid">{t('Vaelg destinationer', 'Choose destinations')}</div></div>
               </button>
               <button onClick={() => setStep('quote')} className="w-full flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-ng-pink/5 hover:border-ng-pink border border-gray-200 transition-all text-left">
                 <span className="text-xl">📋</span>
@@ -252,6 +294,61 @@ export default function ChatWidget() {
               <button onClick={() => setStep('contact')} className="w-full flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-ng-pink/5 hover:border-ng-pink border border-gray-200 transition-all text-left">
                 <span className="text-xl">📞</span>
                 <div><div className="font-semibold text-ng-dark text-sm">{t('Kontakt os', 'Contact us')}</div><div className="text-xs text-ng-gray-mid">{t('Ring eller skriv til os', 'Call or email us')}</div></div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* DESTINATIONS */}
+        {step === 'destinations' && (
+          <div className="py-4 px-4 overflow-y-auto max-h-[450px]">
+            <p className="text-center font-semibold text-ng-dark text-sm mb-1">{t('Hvor vil du hen?', 'Where do you want to go?')}</p>
+            <p className="text-center text-xs text-ng-gray-mid mb-4">{t('Vaelg en eller flere destinationer', 'Select one or more destinations')}</p>
+
+            {DESTINATION_OPTIONS.map((group) => (
+              <div key={group.region} className="mb-3">
+                <p className="text-[10px] font-bold text-ng-gray-mid uppercase tracking-wider mb-1.5">{group.region}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {group.items.map((dest) => (
+                    <button
+                      key={dest}
+                      onClick={() => toggleDestination(dest)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                        selectedDestinations.includes(dest)
+                          ? 'bg-ng-pink text-white'
+                          : 'bg-gray-100 text-ng-dark hover:bg-gray-200'
+                      }`}
+                    >
+                      {dest}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div className="mt-3">
+              <input
+                type="text"
+                value={customDestination}
+                onChange={(e) => setCustomDestination(e.target.value)}
+                placeholder={t('Eller skriv en destination...', 'Or type a destination...')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink"
+              />
+            </div>
+
+            {selectedDestinations.length > 0 && (
+              <p className="text-xs text-ng-gray-mid mt-2">
+                {t('Valgt:', 'Selected:')} <span className="font-semibold text-ng-dark">{selectedDestinations.join(', ')}</span>
+              </p>
+            )}
+
+            <div className="flex gap-2 mt-4">
+              <button onClick={resetWidget} className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm text-ng-gray-mid hover:bg-gray-50">{t('Tilbage', 'Back')}</button>
+              <button onClick={submitDestinations} className="flex-1 py-2.5 bg-ng-pink text-white rounded-lg font-bold text-sm hover:bg-ng-pink-dark transition-colors">
+                {selectedDestinations.length === 0 && !customDestination.trim()
+                  ? t('Aaben for forslag', 'Open to suggestions')
+                  : t('Fortsaet', 'Continue')
+                }
               </button>
             </div>
           </div>
