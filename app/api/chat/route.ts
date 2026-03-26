@@ -52,14 +52,32 @@ export async function POST(request: Request) {
       }).then(() => {})
     }
 
-    // Use the UI language setting to enforce response language
-    const langMap: Record<string, string> = {
-      en: 'You MUST respond ENTIRELY in English. Every single word must be English. Do NOT use Danish, Swedish, or any other language.',
+    // Auto-detect language from the user's message
+    const lastMsg = messages[messages.length - 1]?.content || ''
+    const hasDanishChars = /[æøåÆØÅ]/.test(lastMsg)
+    const hasSwedishChars = /[äöÄÖ]/.test(lastMsg)
+    // Common Danish-only words (excluding words shared with English like "golf", "for", "en")
+    const hasDanishWords = /\b(jeg|gerne|og|ikke|hvad|hvor|hvordan|ønsker|rejse|personer|dage|uger|også|meget|nogle|denne|disse|efter|mere|alle|mange|bare|lidt)\b/i.test(lastMsg)
+    // Common Swedish words
+    const hasSwedishWords = /\b(jag|vill|till|och|är|det|en|har|med|kan|från|den|som|på|av|för|inte|min|dig|mig|vi|ska|vad|var|hur)\b/i.test(lastMsg)
+
+    let detectedLang = language || 'da' // UI toggle as fallback
+    if (hasDanishChars || hasDanishWords) {
+      detectedLang = 'da'
+    } else if (hasSwedishChars || hasSwedishWords) {
+      detectedLang = 'se'
+    } else if (!hasDanishChars && !hasSwedishChars) {
+      // No Nordic characters = likely English
+      detectedLang = 'en'
+    }
+
+    const langInstructions: Record<string, string> = {
+      en: 'CRITICAL INSTRUCTION: You MUST respond ENTIRELY in English. Every single word of your response must be in English. Do NOT use Danish. Do NOT use any Scandinavian language. The user is writing in English so you MUST reply in English only.',
       da: 'Svar på dansk.',
       se: 'Svara på svenska.',
       no: 'Svar på norsk.',
     }
-    const langInstruction = langMap[language] || langMap['da']
+    const langInstruction = langInstructions[detectedLang] || langInstructions['da']
 
     // Prepend language instruction to system prompt
     const fullSystemPrompt = `${langInstruction}\n\n${systemPrompt}`
