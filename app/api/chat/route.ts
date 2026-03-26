@@ -79,15 +79,17 @@ export async function POST(request: Request) {
     }
     const langInstruction = langInstructions[detectedLang] || langInstructions['da']
 
-    // Prepend language instruction to system prompt
-    const fullSystemPrompt = `${langInstruction}\n\n${systemPrompt}`
+    const chatMessages = messages.map((m: { role: string; content: string }) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }))
 
+    // Put language instruction BOTH at the start AND right before the last message
     const apiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-      { role: 'system', content: fullSystemPrompt },
-      ...messages.map((m: { role: string; content: string }) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      })),
+      { role: 'system', content: `${langInstruction}\n\n${systemPrompt}` },
+      ...chatMessages.slice(0, -1),
+      { role: 'system', content: langInstruction },
+      ...chatMessages.slice(-1),
     ]
 
     // Stream response from OpenAI
