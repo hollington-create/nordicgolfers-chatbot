@@ -39,7 +39,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [language, setLanguage] = useState<'da' | 'en'>('da')
+  const [language, setLanguage] = useState<'da' | 'en' | null>(null)
   const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`)
   const [showLeadForm, setShowLeadForm] = useState(false)
   const [leadSubmitted, setLeadSubmitted] = useState(false)
@@ -49,7 +49,7 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLInputElement>(null)
   const chatSectionRef = useRef<HTMLDivElement>(null)
 
-  const quickStarts = language === 'da' ? QUICK_STARTS_DA : QUICK_STARTS_EN
+  const quickStarts = language === 'en' ? QUICK_STARTS_EN : QUICK_STARTS_DA
 
   useEffect(() => {
     // Scroll within the chat container only, not the whole page
@@ -345,7 +345,7 @@ export default function ChatPage() {
           </div>
 
           {/* Quick start buttons */}
-          {!chatOpen && (
+          {!chatOpen && language && (
             <div className="flex flex-wrap justify-center gap-3 mb-8 animate-fade-in">
               {quickStarts.map((q) => (
                 <button
@@ -382,7 +382,32 @@ export default function ChatPage() {
 
               {/* Messages */}
               <div ref={messagesContainerRef} className="h-[400px] overflow-y-auto px-5 py-4 chat-scroll bg-gray-50">
-                {messages.length === 0 && (
+                {messages.length === 0 && !language && (
+                  <div className="text-center py-12 animate-fade-in">
+                    <div className="w-14 h-14 bg-ng-pink/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <span className="text-3xl">⛳</span>
+                    </div>
+                    <p className="text-ng-dark font-semibold text-base mb-6">Choose your language / Vælg sprog</p>
+                    <div className="flex justify-center gap-4">
+                      <button
+                        onClick={() => setLanguage('da')}
+                        className="flex flex-col items-center gap-2 px-8 py-4 bg-white border-2 border-gray-200 rounded-xl hover:border-ng-pink hover:shadow-md transition-all"
+                      >
+                        <span className="text-4xl">🇩🇰</span>
+                        <span className="text-sm font-semibold text-ng-dark">Dansk</span>
+                      </button>
+                      <button
+                        onClick={() => setLanguage('en')}
+                        className="flex flex-col items-center gap-2 px-8 py-4 bg-white border-2 border-gray-200 rounded-xl hover:border-ng-pink hover:shadow-md transition-all"
+                      >
+                        <span className="text-4xl">🇬🇧</span>
+                        <span className="text-sm font-semibold text-ng-dark">English</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {messages.length === 0 && language && (
                   <div className="text-center py-8 animate-fade-in">
                     <div className="w-12 h-12 bg-ng-pink/10 rounded-full flex items-center justify-center mx-auto mb-3">
                       <span className="text-2xl">⛳</span>
@@ -469,11 +494,11 @@ export default function ChatPage() {
                       ? 'Skriv en besked... f.eks. "Vi er 6 der vil til Spanien"'
                       : 'Type a message... e.g. "4 of us want golf in Portugal"'}
                     className="flex-1 px-4 py-2.5 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-ng-pink"
-                    disabled={isLoading}
+                    disabled={isLoading || !language}
                   />
                   <button
                     type="submit"
-                    disabled={isLoading || !input.trim()}
+                    disabled={isLoading || !input.trim() || !language}
                     className="px-6 py-2.5 bg-ng-pink text-white rounded-full font-bold text-sm hover:bg-ng-pink-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Send
