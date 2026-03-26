@@ -61,7 +61,6 @@ export default function ChatPage() {
   function openChat(prompt?: string) {
     setChatOpen(true)
     setTimeout(() => {
-      chatSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
       if (prompt) sendMessage(prompt)
       else inputRef.current?.focus()
     }, 100)
@@ -72,7 +71,6 @@ export default function ChatPage() {
 
     if (!chatOpen) {
       setChatOpen(true)
-      setTimeout(() => chatSectionRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     }
 
     const userMessage: Message = { role: 'user', content: text.trim() }
