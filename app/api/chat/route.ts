@@ -52,18 +52,41 @@ export async function POST(request: Request) {
       }).then(() => {})
     }
 
+    // Detect language from last user message and inject enforcement
+    const lastMsg = messages[messages.length - 1]?.content || ''
+    const isEnglish = /^[a-zA-Z0-9\s.,!?'";\-:()@#$%&*/+=]+$/.test(lastMsg)
+    const isDanish = /[æøåÆØÅ]/.test(lastMsg)
+    const isSwedish = /[åäöÅÄÖ]/.test(lastMsg) && !isDanish
+    const isNorwegian = /[æøåÆØÅ]/.test(lastMsg) // similar to Danish
+
+    let langHint = ''
+    if (isEnglish && !isDanish && !isSwedish) {
+      langHint = 'IMPORTANT: The user is writing in English. You MUST reply entirely in English. Do NOT use Danish.'
+    } else if (isDanish) {
+      langHint = 'The user is writing in Danish. Reply in Danish.'
+    } else if (isSwedish) {
+      langHint = 'The user is writing in Swedish. Reply in Swedish.'
+    }
+
+    const apiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+      { role: 'system', content: systemPrompt },
+      ...messages.map((m: { role: string; content: string }) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
+    ]
+
+    // Add language enforcement as a system message right before the response
+    if (langHint) {
+      apiMessages.push({ role: 'system', content: langHint })
+    }
+
     // Stream response from OpenAI
     const stream = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
       max_tokens: 1024,
       stream: true,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages.map((m: { role: string; content: string }) => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-        })),
-      ],
+      messages: apiMessages,
     })
 
     // Collect full response for saving
