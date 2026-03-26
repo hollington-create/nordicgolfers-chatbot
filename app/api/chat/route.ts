@@ -2,7 +2,9 @@ import OpenAI from 'openai'
 import { systemPrompt } from '@/lib/system-prompt'
 import { supabase } from '@/lib/supabase'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' })
+}
 
 // Simple in-memory rate limiter
 const rateLimiter = new Map<string, { count: number; resetAt: number }>()
@@ -51,7 +53,7 @@ export async function POST(request: Request) {
     }
 
     // Stream response from OpenAI
-    const stream = await openai.chat.completions.create({
+    const stream = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
       max_tokens: 1024,
       stream: true,
