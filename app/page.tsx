@@ -45,13 +45,17 @@ export default function ChatPage() {
   const [leadSubmitted, setLeadSubmitted] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const chatSectionRef = useRef<HTMLDivElement>(null)
 
   const quickStarts = language === 'da' ? QUICK_STARTS_DA : QUICK_STARTS_EN
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // Scroll within the chat container only, not the whole page
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+    }
   }, [messages])
 
   function openChat(prompt?: string) {
@@ -379,7 +383,7 @@ export default function ChatPage() {
               </div>
 
               {/* Messages */}
-              <div className="h-[400px] overflow-y-auto px-5 py-4 chat-scroll bg-gray-50">
+              <div ref={messagesContainerRef} className="h-[400px] overflow-y-auto px-5 py-4 chat-scroll bg-gray-50">
                 {messages.length === 0 && (
                   <div className="text-center py-8 animate-fade-in">
                     <div className="w-12 h-12 bg-ng-pink/10 rounded-full flex items-center justify-center mx-auto mb-3">
