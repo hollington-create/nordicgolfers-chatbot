@@ -218,7 +218,10 @@ export default function ChatWidget() {
   }
 
   function renderMessage(content: string) {
-    return content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>')
+    return content
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-ng-pink underline hover:text-ng-pink-dark">$1</a>')
+      .replace(/\n/g, '<br/>')
   }
 
   if (!open) {
