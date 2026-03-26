@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       })
     }
 
-    const { messages, sessionId } = await request.json()
+    const { messages, sessionId, language } = await request.json()
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: 'Messages required' }), {
@@ -52,34 +52,25 @@ export async function POST(request: Request) {
       }).then(() => {})
     }
 
-    // Detect language from last user message and inject enforcement
-    const lastMsg = messages[messages.length - 1]?.content || ''
-    const isEnglish = /^[a-zA-Z0-9\s.,!?'";\-:()@#$%&*/+=]+$/.test(lastMsg)
-    const isDanish = /[æøåÆØÅ]/.test(lastMsg)
-    const isSwedish = /[åäöÅÄÖ]/.test(lastMsg) && !isDanish
-    const isNorwegian = /[æøåÆØÅ]/.test(lastMsg) // similar to Danish
-
-    let langHint = ''
-    if (isEnglish && !isDanish && !isSwedish) {
-      langHint = 'IMPORTANT: The user is writing in English. You MUST reply entirely in English. Do NOT use Danish.'
-    } else if (isDanish) {
-      langHint = 'The user is writing in Danish. Reply in Danish.'
-    } else if (isSwedish) {
-      langHint = 'The user is writing in Swedish. Reply in Swedish.'
+    // Use the UI language setting to enforce response language
+    const langMap: Record<string, string> = {
+      en: 'You MUST respond ENTIRELY in English. Every single word must be English. Do NOT use Danish, Swedish, or any other language.',
+      da: 'Svar på dansk.',
+      se: 'Svara på svenska.',
+      no: 'Svar på norsk.',
     }
+    const langInstruction = langMap[language] || langMap['da']
+
+    // Prepend language instruction to system prompt
+    const fullSystemPrompt = `${langInstruction}\n\n${systemPrompt}`
 
     const apiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: fullSystemPrompt },
       ...messages.map((m: { role: string; content: string }) => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
       })),
     ]
-
-    // Add language enforcement as a system message right before the response
-    if (langHint) {
-      apiMessages.push({ role: 'system', content: langHint })
-    }
 
     // Stream response from OpenAI
     const stream = await getOpenAI().chat.completions.create({
