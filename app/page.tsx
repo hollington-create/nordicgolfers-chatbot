@@ -391,16 +391,16 @@ export default function ChatPage() {
                     <div className="flex justify-center gap-4">
                       <button
                         onClick={() => setLanguage('da')}
-                        className="flex flex-col items-center gap-2 px-8 py-4 bg-white border-2 border-gray-200 rounded-xl hover:border-ng-pink hover:shadow-md transition-all"
+                        className="flex flex-col items-center gap-3 px-10 py-5 bg-white border-2 border-gray-200 rounded-xl hover:border-ng-pink hover:shadow-lg transition-all"
                       >
-                        <span className="text-4xl">🇩🇰</span>
+                        <img src="https://flagcdn.com/w80/dk.png" alt="Danish flag" className="w-16 h-auto rounded shadow-sm" />
                         <span className="text-sm font-semibold text-ng-dark">Dansk</span>
                       </button>
                       <button
                         onClick={() => setLanguage('en')}
-                        className="flex flex-col items-center gap-2 px-8 py-4 bg-white border-2 border-gray-200 rounded-xl hover:border-ng-pink hover:shadow-md transition-all"
+                        className="flex flex-col items-center gap-3 px-10 py-5 bg-white border-2 border-gray-200 rounded-xl hover:border-ng-pink hover:shadow-lg transition-all"
                       >
-                        <span className="text-4xl">🇬🇧</span>
+                        <img src="https://flagcdn.com/w80/gb.png" alt="British flag" className="w-16 h-auto rounded shadow-sm" />
                         <span className="text-sm font-semibold text-ng-dark">English</span>
                       </button>
                     </div>
