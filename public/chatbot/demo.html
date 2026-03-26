@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NordicGolfers Chatbot Demo</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; padding: 40px; background: #f0f0f0; }
+    h1 { color: #333; }
+    p { color: #666; max-width: 600px; }
+  </style>
+</head>
+<body>
+  <h1>NordicGolfers.com — Chatbot Widget Demo</h1>
+  <p>This page demonstrates the embeddable chatbot widget. Click the pink chat button in the bottom-right corner to start chatting.</p>
+  <p>The widget connects to the API at the configured endpoint and streams AI responses in real-time.</p>
+
+  <script>window.NG_CHAT_API = "/api/chat";</script>
+  <script>window.NG_LEAD_API = "/api/lead";</script>
+  <script src="/chatbot/nordicgolfers-widget.js"></script>
+</body>
+</html>
