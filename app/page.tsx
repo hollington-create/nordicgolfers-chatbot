@@ -1,222 +1,27 @@
 'use client'
 
-import { useState, useRef, useEffect, FormEvent } from 'react'
+import ChatWidget from '@/components/ChatWidget'
 
-interface Message {
-  role: 'user' | 'assistant'
-  content: string
-}
+const DESTINATIONS = [
+  { name: 'Spanien', nameEn: 'Spain', img: 'https://www.nordicgolfers.com/fileadmin/_processed_/3/7/csm_islacanela-2_792fe36d03.jpg' },
+  { name: 'Portugal', nameEn: 'Portugal', img: 'https://www.nordicgolfers.com/fileadmin/_processed_/2/3/csm_pirin_9_side_club_pm_766df58527.jpg' },
+  { name: 'Tyrkiet', nameEn: 'Turkey', img: 'https://www.nordicgolfers.com/fileadmin/_processed_/3/5/csm_MeliaPuntaCanaBeach-pool2_49a33af340.jpg' },
+  { name: 'Danmark', nameEn: 'Denmark', img: 'https://www.nordicgolfers.com/fileadmin/_processed_/a/b/csm_HeritageAwali-profil1_bd602dda67.jpg' },
+]
 
-type Step = 'language' | 'menu' | 'chat' | 'quote' | 'contact'
+const STATS = [
+  { value: '800+', label: 'Golfbaner & Resorts' },
+  { value: '30+', label: 'Lande' },
+  { value: '50.000+', label: 'Tilfredse golfere' },
+  { value: '100%', label: 'Prisgaranti' },
+]
 
-export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [language, setLanguage] = useState<'da' | 'en' | null>(null)
-  const [step, setStep] = useState<Step>('language')
-  const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`)
-  const [showLeadForm, setShowLeadForm] = useState(false)
-  const [leadSubmitted, setLeadSubmitted] = useState(false)
-  const messagesContainerRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const t = (da: string, en: string) => language === 'en' ? en : da
-
-  useEffect(() => {
-    if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
-    }
-  }, [messages])
-
-  function chooseLanguage(lang: 'da' | 'en') {
-    setLanguage(lang)
-    setStep('menu')
-  }
-
-  function goToChat(prompt?: string) {
-    setStep('chat')
-    if (prompt) {
-      setTimeout(() => sendMessage(prompt), 200)
-    } else {
-      setTimeout(() => inputRef.current?.focus(), 200)
-    }
-  }
-
-  async function sendMessage(text: string) {
-    if (!text.trim() || isLoading) return
-
-    const userMessage: Message = { role: 'user', content: text.trim() }
-    const newMessages = [...messages, userMessage]
-    setMessages(newMessages)
-    setInput('')
-    setIsLoading(true)
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages, sessionId, language }),
-      })
-
-      if (!response.ok) throw new Error('Chat request failed')
-
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('No reader')
-
-      const decoder = new TextDecoder()
-      let assistantContent = ''
-
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }])
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n')
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') break
-
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.text) {
-                assistantContent += parsed.text
-                setMessages(prev => {
-                  const updated = [...prev]
-                  updated[updated.length - 1] = { role: 'assistant', content: assistantContent }
-                  return updated
-                })
-              }
-              if (parsed.action === 'lead_capture') {
-                setShowLeadForm(true)
-              }
-            } catch {}
-          }
-        }
-      }
-
-      if (assistantContent.includes('[[LEAD_CAPTURE]]')) {
-        const cleaned = assistantContent.replace(/\[\[LEAD_CAPTURE\]\]/g, '').trim()
-        setMessages(prev => {
-          const updated = [...prev]
-          updated[updated.length - 1] = { role: 'assistant', content: cleaned }
-          return updated
-        })
-        setShowLeadForm(true)
-      }
-    } catch (error) {
-      setMessages(prev => [
-        ...prev.filter(m => m.content !== ''),
-        {
-          role: 'assistant',
-          content: t(
-            'Beklager, der opstod en fejl. Prøv venligst igen, eller kontakt os på +45 2441 2240.',
-            'Sorry, an error occurred. Please try again or contact us at +45 2441 2240.'
-          ),
-        },
-      ])
-    } finally {
-      setIsLoading(false)
-      inputRef.current?.focus()
-    }
-  }
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    sendMessage(input)
-  }
-
-  async function handleLeadSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    const lead = {
-      name: formData.get('name') as string,
-      email: formData.get('email') as string,
-      phone: formData.get('phone') as string,
-      destination: formData.get('destination') as string,
-      people: formData.get('people') as string,
-      dates: formData.get('dates') as string,
-      session_id: sessionId,
-      language,
-      source_page: window.location.href,
-    }
-
-    try {
-      // Send to chat for confirmation
-      const chatMsg = language === 'en'
-        ? `[LEAD_INFO] Name: ${lead.name}, Email: ${lead.email}, Phone: ${lead.phone}, Destination: ${lead.destination}, People: ${lead.people}, Dates: ${lead.dates}`
-        : `[LEAD_INFO] Navn: ${lead.name}, Email: ${lead.email}, Telefon: ${lead.phone}, Destination: ${lead.destination}, Antal: ${lead.people}, Dato: ${lead.dates}`
-
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: chatMsg }],
-          sessionId,
-          language,
-        }),
-      })
-
-      await fetch('/api/lead', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(lead),
-      }).catch(() => {})
-
-      setLeadSubmitted(true)
-
-      // Show confirmation in chat
-      if (response.ok) {
-        setStep('chat')
-        const reader = response.body?.getReader()
-        if (reader) {
-          const decoder = new TextDecoder()
-          let assistantContent = ''
-          setMessages(prev => [...prev, { role: 'assistant', content: '' }])
-
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            const chunk = decoder.decode(value, { stream: true })
-            for (const line of chunk.split('\n')) {
-              if (line.startsWith('data: ') && line.slice(6) !== '[DONE]') {
-                try {
-                  const parsed = JSON.parse(line.slice(6))
-                  if (parsed.text) {
-                    assistantContent += parsed.text
-                    setMessages(prev => {
-                      const updated = [...prev]
-                      updated[updated.length - 1] = { role: 'assistant', content: assistantContent }
-                      return updated
-                    })
-                  }
-                } catch {}
-              }
-            }
-          }
-        }
-      }
-    } catch {
-      setLeadSubmitted(true)
-      setStep('chat')
-    }
-  }
-
-  function renderMessage(content: string) {
-    return content
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n/g, '<br/>')
-  }
-
+export default function HomePage() {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* ===== NAV ===== */}
-      <nav className="bg-white border-b border-gray-100 sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-white">
+      {/* ===== NAVIGATION ===== */}
+      <nav className="bg-white border-b border-gray-100 sticky top-0 z-40">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <a href="https://www.nordicgolfers.com" target="_blank" rel="noopener noreferrer" className="block">
             <div
               className="w-[206px] h-[50px] bg-no-repeat"
@@ -228,378 +33,144 @@ export default function ChatPage() {
               role="img"
             />
           </a>
-          {step !== 'language' && (
-            <button
-              onClick={() => { setStep('menu'); setMessages([]); setShowLeadForm(false); setLeadSubmitted(false) }}
-              className="text-sm text-ng-gray-mid hover:text-ng-pink transition-colors"
-            >
-              {t('← Tilbage til menu', '← Back to menu')}
-            </button>
-          )}
+          <div className="hidden md:flex items-center gap-6 text-sm font-semibold text-ng-dark uppercase tracking-wide">
+            <a href="https://www.nordicgolfers.com/destinationer" target="_blank" rel="noopener" className="hover:text-ng-pink transition-colors">Destinationer</a>
+            <a href="https://www.nordicgolfers.com/soeg-golfpakker" target="_blank" rel="noopener" className="hover:text-ng-pink transition-colors">Golfpakker</a>
+            <a href="https://www.nordicgolfers.com/resorts" target="_blank" rel="noopener" className="hover:text-ng-pink transition-colors">Resorts</a>
+            <a href="https://www.nordicgolfers.com/long-stay" target="_blank" rel="noopener" className="hover:text-ng-pink transition-colors">Long Stay</a>
+            <a href="https://www.nordicgolfers.com/faa-tilbud" target="_blank" rel="noopener" className="bg-ng-pink text-white px-5 py-2 rounded hover:bg-ng-pink-dark transition-colors normal-case tracking-normal">
+              Faa Tilbud
+            </a>
+          </div>
         </div>
       </nav>
 
-      {/* ===== MAIN CONTENT ===== */}
-      <main className="flex-1 flex items-center justify-center px-4 py-8">
-        <div className="w-full max-w-2xl">
-
-          {/* ===== STEP 1: LANGUAGE ===== */}
-          {step === 'language' && (
-            <div className="text-center animate-fade-in">
-              <div className="w-20 h-20 bg-ng-pink/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                <span className="text-4xl">⛳</span>
-              </div>
-              <h1 className="text-2xl md:text-3xl font-light text-ng-dark uppercase tracking-widest mb-2">
-                NordicGolfers
-              </h1>
-              <p className="text-ng-gray-mid mb-10">
-                Choose your language / Vaelg sprog
-              </p>
-              <div className="flex justify-center gap-6">
-                <button
-                  onClick={() => chooseLanguage('da')}
-                  className="flex flex-col items-center gap-3 px-12 py-6 bg-white border-2 border-gray-200 rounded-2xl hover:border-ng-pink hover:shadow-lg transition-all group"
-                >
-                  <img src="https://flagcdn.com/w80/dk.png" alt="Danish flag" className="w-20 h-auto rounded shadow-sm group-hover:scale-105 transition-transform" />
-                  <span className="text-base font-semibold text-ng-dark">Dansk</span>
-                </button>
-                <button
-                  onClick={() => chooseLanguage('en')}
-                  className="flex flex-col items-center gap-3 px-12 py-6 bg-white border-2 border-gray-200 rounded-2xl hover:border-ng-pink hover:shadow-lg transition-all group"
-                >
-                  <img src="https://flagcdn.com/w80/gb.png" alt="British flag" className="w-20 h-auto rounded shadow-sm group-hover:scale-105 transition-transform" />
-                  <span className="text-base font-semibold text-ng-dark">English</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ===== STEP 2: MENU ===== */}
-          {step === 'menu' && (
-            <div className="text-center animate-fade-in">
-              <div className="w-16 h-16 bg-ng-pink/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl">⛳</span>
-              </div>
-              <h2 className="text-xl md:text-2xl font-light text-ng-dark uppercase tracking-widest mb-2">
-                {t('Hvordan kan vi hjaelpe?', 'How can we help?')}
-              </h2>
-              <p className="text-ng-gray-mid text-sm mb-8">
-                {t('Vaelg en mulighed nedenfor', 'Choose an option below')}
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto">
-                <button
-                  onClick={() => goToChat(t('Jeg vil gerne finde en golfrejse', 'I want to find a golf trip'))}
-                  className="flex items-center gap-4 p-5 bg-white border-2 border-gray-200 rounded-xl hover:border-ng-pink hover:shadow-lg transition-all text-left group"
-                >
-                  <div className="w-12 h-12 bg-ng-pink/10 rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-ng-pink/20 transition-colors">
-                    <span className="text-2xl">🔍</span>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-ng-dark text-sm">{t('Find en golfrejse', 'Find a golf trip')}</div>
-                    <div className="text-xs text-ng-gray-mid mt-0.5">{t('Soeg destinationer og resorts', 'Search destinations & resorts')}</div>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => setStep('quote')}
-                  className="flex items-center gap-4 p-5 bg-white border-2 border-gray-200 rounded-xl hover:border-ng-pink hover:shadow-lg transition-all text-left group"
-                >
-                  <div className="w-12 h-12 bg-ng-pink/10 rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-ng-pink/20 transition-colors">
-                    <span className="text-2xl">📋</span>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-ng-dark text-sm">{t('Faa et tilbud', 'Get a quote')}</div>
-                    <div className="text-xs text-ng-gray-mid mt-0.5">{t('Vi sender et skraeddersyet tilbud', "We'll send a tailored offer")}</div>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => {
-                    window.open('https://www.nordicgolfers.com/destinationer', '_blank')
-                  }}
-                  className="flex items-center gap-4 p-5 bg-white border-2 border-gray-200 rounded-xl hover:border-ng-pink hover:shadow-lg transition-all text-left group"
-                >
-                  <div className="w-12 h-12 bg-ng-pink/10 rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-ng-pink/20 transition-colors">
-                    <span className="text-2xl">🌍</span>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-ng-dark text-sm">{t('Udforsk destinationer', 'Browse destinations')}</div>
-                    <div className="text-xs text-ng-gray-mid mt-0.5">{t('30+ lande med 800+ baner', '30+ countries with 800+ courses')}</div>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => setStep('contact')}
-                  className="flex items-center gap-4 p-5 bg-white border-2 border-gray-200 rounded-xl hover:border-ng-pink hover:shadow-lg transition-all text-left group"
-                >
-                  <div className="w-12 h-12 bg-ng-pink/10 rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-ng-pink/20 transition-colors">
-                    <span className="text-2xl">📞</span>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-ng-dark text-sm">{t('Kontakt os', 'Contact us')}</div>
-                    <div className="text-xs text-ng-gray-mid mt-0.5">{t('Ring eller skriv til os', 'Call or email us')}</div>
-                  </div>
-                </button>
-              </div>
-
-              <p className="text-xs text-ng-gray-mid mt-8">
-                {t('Prisgaranti — Medlem af Rejsegarantifonden nr. 3356', 'Price guarantee — Member of Travel Guarantee Fund #3356')}
-              </p>
-            </div>
-          )}
-
-          {/* ===== STEP 3a: CHAT ===== */}
-          {step === 'chat' && (
-            <div className="animate-fade-in">
-              <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                {/* Chat header */}
-                <div className="bg-ng-dark px-5 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-ng-pink rounded-full flex items-center justify-center">
-                      <span className="text-white text-sm">⛳</span>
-                    </div>
-                    <div>
-                      <div className="text-white font-semibold text-sm">NordicGolfers Assistant</div>
-                      <div className="text-green-400 text-xs flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-green-400 rounded-full inline-block"></span>
-                        Online
-                      </div>
-                    </div>
-                  </div>
-                  <button onClick={() => { setStep('menu'); setMessages([]) }} className="text-gray-400 hover:text-white text-lg">✕</button>
-                </div>
-
-                {/* Messages */}
-                <div ref={messagesContainerRef} className="h-[450px] overflow-y-auto px-5 py-4 chat-scroll bg-gray-50">
-                  {messages.length === 0 && (
-                    <div className="text-center py-8 animate-fade-in">
-                      <div className="w-12 h-12 bg-ng-pink/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <span className="text-2xl">⛳</span>
-                      </div>
-                      <p className="text-ng-gray-mid text-sm">
-                        {t(
-                          'Hej! Jeg er klar til at hjaelpe dig med at finde den perfekte golfrejse. Hvad droemmer du om?',
-                          "Hi! I'm ready to help you find the perfect golf trip. What are you dreaming of?"
-                        )}
-                      </p>
-                    </div>
-                  )}
-
-                  {messages.map((msg, i) => (
-                    <div
-                      key={i}
-                      className={`flex mb-4 animate-fade-in ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      {msg.role === 'assistant' && (
-                        <div className="w-7 h-7 bg-ng-pink rounded-full flex items-center justify-center mr-2 flex-shrink-0 mt-1">
-                          <span className="text-white text-xs">⛳</span>
-                        </div>
-                      )}
-                      <div
-                        className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                          msg.role === 'user'
-                            ? 'bg-ng-pink text-white rounded-br-sm'
-                            : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
-                        }`}
-                        dangerouslySetInnerHTML={{ __html: renderMessage(msg.content) }}
-                      />
-                    </div>
-                  ))}
-
-                  {isLoading && messages[messages.length - 1]?.content === '' && (
-                    <div className="flex mb-4">
-                      <div className="w-7 h-7 bg-ng-pink rounded-full flex items-center justify-center mr-2 flex-shrink-0">
-                        <span className="text-white text-xs">⛳</span>
-                      </div>
-                      <div className="bg-white border border-gray-200 px-4 py-3 rounded-2xl rounded-bl-sm shadow-sm">
-                        <span className="typing-dot"></span>
-                        <span className="typing-dot"></span>
-                        <span className="typing-dot"></span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* In-chat lead form */}
-                  {showLeadForm && !leadSubmitted && (
-                    <div className="bg-white border-2 border-ng-pink rounded-xl p-5 mb-4 animate-fade-in max-w-sm mx-auto shadow-lg">
-                      <h3 className="font-bold text-base mb-1 text-ng-dark">
-                        {t('📋 Faa et tilbud', '📋 Get a quote')}
-                      </h3>
-                      <p className="text-xs text-ng-gray-mid mb-3">
-                        {t('Udfyld dine oplysninger, saa kontakter vi dig.', "Fill in your details and we'll contact you.")}
-                      </p>
-                      <form onSubmit={handleLeadSubmit} className="space-y-2">
-                        <input name="name" type="text" required placeholder={t('Dit navn', 'Your name')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-                        <input name="email" type="email" required placeholder={t('Din email', 'Your email')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-                        <input name="phone" type="tel" placeholder={t('Telefonnummer', 'Phone number')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-                        <input name="destination" type="text" value="" hidden />
-                        <input name="people" type="text" value="" hidden />
-                        <input name="dates" type="text" value="" hidden />
-                        <button type="submit" className="w-full py-2.5 bg-ng-pink text-white rounded-lg font-bold text-sm hover:bg-ng-pink-dark transition-colors">
-                          {t('Send', 'Submit')}
-                        </button>
-                      </form>
-                      <button onClick={() => setShowLeadForm(false)} className="text-xs text-gray-400 mt-2 hover:text-gray-600">
-                        {t('Senere', 'Maybe later')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Input */}
-                <div className="border-t border-gray-200 bg-white px-4 py-3">
-                  <form onSubmit={handleSubmit} className="flex gap-2">
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder={t(
-                        'Skriv en besked... f.eks. "Vi er 6 der vil til Spanien"',
-                        'Type a message... e.g. "4 of us want golf in Portugal"'
-                      )}
-                      className="flex-1 px-4 py-2.5 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-ng-pink"
-                      disabled={isLoading}
-                    />
-                    <button
-                      type="submit"
-                      disabled={isLoading || !input.trim()}
-                      className="px-6 py-2.5 bg-ng-pink text-white rounded-full font-bold text-sm hover:bg-ng-pink-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Send
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ===== STEP 3b: QUOTE FORM ===== */}
-          {step === 'quote' && !leadSubmitted && (
-            <div className="animate-fade-in">
-              <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 md:p-8">
-                <div className="text-center mb-6">
-                  <div className="w-14 h-14 bg-ng-pink/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <span className="text-2xl">📋</span>
-                  </div>
-                  <h2 className="text-xl font-bold text-ng-dark">{t('Faa et uforpligtende tilbud', 'Get a free quote')}</h2>
-                  <p className="text-sm text-ng-gray-mid mt-1">
-                    {t('Vi vender tilbage inden for 1 hverdag', "We'll get back to you within 1 business day")}
-                  </p>
-                </div>
-
-                <form onSubmit={handleLeadSubmit} className="space-y-4 max-w-md mx-auto">
-                  <div>
-                    <label className="block text-xs font-semibold text-ng-dark mb-1">{t('Navn *', 'Name *')}</label>
-                    <input name="name" type="text" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ng-dark mb-1">{t('Email *', 'Email *')}</label>
-                    <input name="email" type="email" required className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ng-dark mb-1">{t('Telefon', 'Phone')}</label>
-                    <input name="phone" type="tel" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ng-dark mb-1">{t('Destination (valgfrit)', 'Destination (optional)')}</label>
-                    <input name="destination" type="text" placeholder={t('f.eks. Spanien, Portugal, Tyrkiet...', 'e.g. Spain, Portugal, Turkey...')} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-ng-dark mb-1">{t('Antal personer', 'Number of people')}</label>
-                      <input name="people" type="text" placeholder={t('f.eks. 4', 'e.g. 4')} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-ng-dark mb-1">{t('Datoer', 'Dates')}</label>
-                      <input name="dates" type="text" placeholder={t('f.eks. juni 2026', 'e.g. June 2026')} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-                    </div>
-                  </div>
-                  <button type="submit" className="w-full py-3 bg-ng-pink text-white rounded-lg font-bold text-sm hover:bg-ng-pink-dark transition-colors uppercase tracking-wide">
-                    {t('Send foresporgsel', 'Submit request')}
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* Quote submitted confirmation */}
-          {step === 'quote' && leadSubmitted && (
-            <div className="animate-fade-in text-center">
-              <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 max-w-md mx-auto">
-                <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">✅</span>
-                </div>
-                <h2 className="text-xl font-bold text-ng-dark mb-2">{t('Tak for din foresporgsel!', 'Thank you for your request!')}</h2>
-                <p className="text-sm text-ng-gray-mid mb-6">
-                  {t(
-                    'Vi vender tilbage inden for 1 hverdag med et skraeddersyet tilbud. Du kan ogsaa ringe til os paa +45 2441 2240.',
-                    "We'll get back to you within 1 business day with a tailored offer. You can also call us at +45 2441 2240."
-                  )}
-                </p>
-                <button
-                  onClick={() => { setStep('menu'); setLeadSubmitted(false) }}
-                  className="px-6 py-2.5 bg-ng-pink text-white rounded-lg font-bold text-sm hover:bg-ng-pink-dark transition-colors"
-                >
-                  {t('Tilbage til menu', 'Back to menu')}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ===== STEP 3d: CONTACT ===== */}
-          {step === 'contact' && (
-            <div className="animate-fade-in text-center">
-              <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 max-w-md mx-auto">
-                <div className="w-16 h-16 bg-ng-pink/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">📞</span>
-                </div>
-                <h2 className="text-xl font-bold text-ng-dark mb-4">{t('Kontakt NordicGolfers', 'Contact NordicGolfers')}</h2>
-
-                <div className="space-y-4 text-left">
-                  <a href="tel:+4524412240" className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-ng-pink/5 transition-colors">
-                    <span className="text-2xl">📱</span>
-                    <div>
-                      <div className="font-semibold text-ng-dark text-sm">+45 2441 2240</div>
-                      <div className="text-xs text-ng-gray-mid">{t('Man-fre 10:00-15:00', 'Mon-Fri 10:00-15:00')}</div>
-                    </div>
-                  </a>
-                  <a href="mailto:service@nordicgolfers.com" className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-ng-pink/5 transition-colors">
-                    <span className="text-2xl">✉️</span>
-                    <div>
-                      <div className="font-semibold text-ng-dark text-sm">service@nordicgolfers.com</div>
-                      <div className="text-xs text-ng-gray-mid">{t('Vi svarer inden for 1 hverdag', 'We reply within 1 business day')}</div>
-                    </div>
-                  </a>
-                  <a href="https://www.nordicgolfers.com" target="_blank" rel="noopener" className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-ng-pink/5 transition-colors">
-                    <span className="text-2xl">🌐</span>
-                    <div>
-                      <div className="font-semibold text-ng-dark text-sm">www.nordicgolfers.com</div>
-                      <div className="text-xs text-ng-gray-mid">{t('Besog vores hjemmeside', 'Visit our website')}</div>
-                    </div>
-                  </a>
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-gray-200">
-                  <p className="text-xs text-ng-gray-mid">
-                    NordicGolfers.com Travel ApS — CVR: 42289019<br />
-                    Kirsten Kimers Vej 20, 2300 Koebenhavn S
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
+      {/* ===== HERO ===== */}
+      <section className="relative h-[500px] md:h-[600px] overflow-hidden">
+        <img
+          src="https://www.nordicgolfers.com/fileadmin/_processed_/7/c/csm_Banner_PC_visning-01-01_aa913e9fe3.jpg"
+          alt="Golf course panorama"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="hero-overlay absolute inset-0" />
+        <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-4">
+          <h1 className="text-white text-3xl md:text-5xl font-light mb-4 drop-shadow-lg max-w-3xl leading-tight uppercase tracking-widest">
+            Your Personal Golf Trip Assistant
+          </h1>
+          <p className="text-white/90 text-lg md:text-xl mb-8 drop-shadow max-w-2xl">
+            Tell us your preferences and get tailored recommendations in seconds.
+          </p>
         </div>
-      </main>
+      </section>
+
+      {/* ===== STATS ===== */}
+      <section className="bg-ng-dark text-white py-6">
+        <div className="max-w-6xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+          {STATS.map((stat) => (
+            <div key={stat.label}>
+              <div className="text-2xl md:text-3xl font-bold text-ng-pink">{stat.value}</div>
+              <div className="text-xs md:text-sm text-gray-300 mt-1 uppercase tracking-wide">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ===== POPULAR DESTINATIONS ===== */}
+      <section className="py-12 bg-white">
+        <div className="max-w-6xl mx-auto px-4">
+          <h2 className="text-2xl md:text-3xl font-light text-ng-dark uppercase tracking-widest text-center mb-8">
+            Populaere Destinationer
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {DESTINATIONS.map((dest) => (
+              <a
+                key={dest.name}
+                href={`https://www.nordicgolfers.com/destinationer/${dest.name.toLowerCase()}`}
+                target="_blank"
+                rel="noopener"
+                className="group relative h-48 md:h-64 rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all"
+              >
+                <img src={dest.img} alt={dest.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-4">
+                  <h3 className="text-white font-bold text-lg">{dest.name}</h3>
+                  <span className="text-ng-pink text-xs font-bold uppercase tracking-wide">Se tilbud &rarr;</span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== WHY NORDICGOLFERS ===== */}
+      <section className="py-12 bg-gray-50">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <h2 className="text-2xl md:text-3xl font-light text-ng-dark uppercase tracking-widest mb-6">
+            Hvorfor NordicGolfers?
+          </h2>
+          <div className="grid md:grid-cols-3 gap-8">
+            <div>
+              <div className="w-14 h-14 bg-ng-pink/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-2xl">💰</span>
+              </div>
+              <h3 className="font-bold text-ng-dark mb-1">Prisgaranti</h3>
+              <p className="text-sm text-ng-gray-mid">Direkte priser fra partnere &mdash; ingen mellemled eller ekstra gebyrer.</p>
+            </div>
+            <div>
+              <div className="w-14 h-14 bg-ng-pink/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-2xl">🛡️</span>
+              </div>
+              <h3 className="font-bold text-ng-dark mb-1">Rejsegarantifonden</h3>
+              <p className="text-sm text-ng-gray-mid">Medlem af Rejsegarantifonden (nr. 3356). Din rejse er sikret.</p>
+            </div>
+            <div>
+              <div className="w-14 h-14 bg-ng-pink/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-2xl">🏌️</span>
+              </div>
+              <h3 className="font-bold text-ng-dark mb-1">30+ Aars Erfaring</h3>
+              <p className="text-sm text-ng-gray-mid">Grundlagt af passionerede golfere med over 30 aars personlig erfaring.</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ===== FOOTER ===== */}
-      <footer className="bg-ng-dark text-gray-400 py-4">
-        <div className="text-center text-xs">
-          © {new Date().getFullYear()} NordicGolfers.com Travel ApS — {t('Medlem af Rejsegarantifonden nr. 3356', 'Member of Travel Guarantee Fund #3356')} — {t('Prisgaranti', 'Price Guarantee')}
+      <footer className="bg-ng-dark text-gray-400 py-10">
+        <div className="max-w-6xl mx-auto px-4 grid md:grid-cols-3 gap-8">
+          <div>
+            <h4 className="text-white font-bold text-sm uppercase tracking-wide mb-3">Kontakt os</h4>
+            <p className="text-sm leading-relaxed">
+              Telefon: <a href="tel:+4524412240" className="text-ng-pink hover:underline">+45 2441 2240</a><br />
+              Mandag - fredag: 10:00 - 15:00<br />
+              E-mail: <a href="mailto:service@nordicgolfers.com" className="text-ng-pink hover:underline">service@nordicgolfers.com</a>
+            </p>
+          </div>
+          <div>
+            <h4 className="text-white font-bold text-sm uppercase tracking-wide mb-3">NordicGolfers.com Travel ApS</h4>
+            <p className="text-sm leading-relaxed">
+              CVR: 42289019<br />
+              Kirsten Kimers Vej 20<br />
+              2300 Koebenhavn S<br />
+              Danmark
+            </p>
+          </div>
+          <div>
+            <h4 className="text-white font-bold text-sm uppercase tracking-wide mb-3">Quick Links</h4>
+            <div className="flex flex-col gap-1 text-sm">
+              <a href="https://www.nordicgolfers.com/destinationer" target="_blank" rel="noopener" className="hover:text-ng-pink transition-colors">Golfdestinationer</a>
+              <a href="https://www.nordicgolfers.com/soeg-golfpakker" target="_blank" rel="noopener" className="hover:text-ng-pink transition-colors">Golfpakker</a>
+              <a href="https://www.nordicgolfers.com/long-stay" target="_blank" rel="noopener" className="hover:text-ng-pink transition-colors">Long Stay</a>
+              <a href="https://www.nordicgolfers.com/grupperejser" target="_blank" rel="noopener" className="hover:text-ng-pink transition-colors">Grupperejser</a>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-6xl mx-auto px-4 mt-8 pt-6 border-t border-gray-700 text-center text-xs text-gray-500">
+          &copy; {new Date().getFullYear()} NordicGolfers.com Travel ApS &mdash; Medlem af Rejsegarantifonden nr. 3356
         </div>
       </footer>
+
+      {/* ===== CHAT WIDGET ===== */}
+      <ChatWidget />
     </div>
   )
 }
