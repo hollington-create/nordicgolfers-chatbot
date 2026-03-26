@@ -8,6 +8,19 @@ interface Message {
 }
 
 type Step = 'language' | 'menu' | 'destinations' | 'chat' | 'quote' | 'contact'
+type QuoteStep = 'destination' | 'dates' | 'people' | 'rooms' | 'rounds' | 'name' | 'email' | 'phone' | 'notes' | 'done'
+
+const QUOTE_FLOW: { step: QuoteStep; field: string }[] = [
+  { step: 'destination', field: 'destination' },
+  { step: 'dates', field: 'dates' },
+  { step: 'people', field: 'people' },
+  { step: 'rooms', field: 'rooms' },
+  { step: 'rounds', field: 'rounds' },
+  { step: 'name', field: 'name' },
+  { step: 'email', field: 'email' },
+  { step: 'phone', field: 'phone' },
+  { step: 'notes', field: 'notes' },
+]
 
 const DESTINATION_OPTIONS = [
   { region: 'Scandinavia', items: ['Danmark', 'Sverige', 'Norge', 'Finland'] },
@@ -30,7 +43,12 @@ export default function ChatWidget() {
   const [leadSubmitted, setLeadSubmitted] = useState(false)
   const [selectedDestinations, setSelectedDestinations] = useState<string[]>([])
   const [customDestination, setCustomDestination] = useState('')
+  const [quoteStep, setQuoteStep] = useState<QuoteStep>('destination')
+  const [quoteData, setQuoteData] = useState<Record<string, string>>({})
+  const [quoteInput, setQuoteInput] = useState('')
+  const [quoteSelectedDests, setQuoteSelectedDests] = useState<string[]>([])
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const quoteContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const t = (da: string, en: string) => language === 'en' ? en : da
@@ -91,6 +109,80 @@ export default function ChatWidget() {
     setMessages([])
     setShowLeadForm(false)
     setLeadSubmitted(false)
+    setQuoteStep('destination')
+    setQuoteData({})
+    setQuoteInput('')
+    setQuoteSelectedDests([])
+  }
+
+  function getQuoteQuestion(qs: QuoteStep): string {
+    const questions: Record<string, { da: string; en: string }> = {
+      destination: { da: 'Hvor vil du gerne spille golf?', en: 'Where would you like to play golf?' },
+      dates: { da: 'Hvornaar vil du rejse? (afrejse- og hjemrejsedato)', en: 'When do you want to travel? (departure & return dates)' },
+      people: { da: 'Hvor mange personer rejser I?', en: 'How many people are traveling?' },
+      rooms: { da: 'Hvor mange vaerelser? (dobbelt / enkelt)', en: 'How many rooms? (double / single)' },
+      rounds: { da: 'Hvor mange golfrunder oensker I?', en: 'How many rounds of golf would you like?' },
+      name: { da: 'Hvad er dit navn?', en: 'What is your name?' },
+      email: { da: 'Hvad er din e-mail?', en: 'What is your email?' },
+      phone: { da: 'Hvad er dit telefonnummer?', en: 'What is your phone number?' },
+      notes: { da: 'Har du specielle oensker? (valgfrit — skriv "nej" for at springe over)', en: 'Any special requests? (optional — type "no" to skip)' },
+    }
+    return t(questions[qs]?.da || '', questions[qs]?.en || '')
+  }
+
+  function advanceQuote(value: string) {
+    const newData = { ...quoteData, [quoteStep]: value }
+    setQuoteData(newData)
+    setQuoteInput('')
+
+    const steps: QuoteStep[] = ['destination', 'dates', 'people', 'rooms', 'rounds', 'name', 'email', 'phone', 'notes', 'done']
+    const currentIdx = steps.indexOf(quoteStep)
+    const nextStep = steps[currentIdx + 1]
+
+    if (nextStep === 'done') {
+      setQuoteStep('done')
+      // Submit the quote
+      submitQuote(newData)
+    } else {
+      setQuoteStep(nextStep as QuoteStep)
+    }
+
+    setTimeout(() => {
+      if (quoteContainerRef.current) {
+        quoteContainerRef.current.scrollTop = quoteContainerRef.current.scrollHeight
+      }
+    }, 50)
+  }
+
+  async function submitQuote(data: Record<string, string>) {
+    const lead = {
+      name: data.name || '',
+      email: data.email || '',
+      phone: data.phone || '',
+      destination: data.destination || '',
+      people: data.people || '',
+      dates: data.dates || '',
+      rooms: data.rooms || '',
+      rounds: data.rounds || '',
+      notes: data.notes || '',
+      session_id: sessionId,
+      language,
+      source_page: typeof window !== 'undefined' ? window.location.href : '',
+    }
+
+    await fetch('/api/lead', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lead),
+    }).catch(() => {})
+
+    setLeadSubmitted(true)
+  }
+
+  function toggleQuoteDest(dest: string) {
+    setQuoteSelectedDests(prev =>
+      prev.includes(dest) ? prev.filter(d => d !== dest) : [...prev, dest]
+    )
   }
 
   async function sendMessage(text: string) {
@@ -404,30 +496,119 @@ export default function ChatWidget() {
           </>
         )}
 
-        {/* QUOTE */}
-        {step === 'quote' && !leadSubmitted && (
-          <div className="p-5">
-            <p className="text-center font-bold text-ng-dark text-sm mb-4">{t('Faa et uforpligtende tilbud', 'Get a free quote')}</p>
-            <form onSubmit={handleLeadSubmit} className="space-y-3">
-              <input name="name" type="text" required placeholder={t('Navn *', 'Name *')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-              <input name="email" type="email" required placeholder={t('Email *', 'Email *')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-              <input name="phone" type="tel" placeholder={t('Telefon', 'Phone')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-              <input name="destination" type="text" placeholder={t('Destination', 'Destination')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-              <div className="grid grid-cols-2 gap-2">
-                <input name="people" type="text" placeholder={t('Antal', 'People')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
-                <input name="dates" type="text" placeholder={t('Dato', 'Dates')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" />
+        {/* QUOTE — Guided conversational flow */}
+        {step === 'quote' && (
+          <div ref={quoteContainerRef} className="overflow-y-auto max-h-[450px] px-4 py-3 bg-gray-50">
+            {/* Completed answers */}
+            {QUOTE_FLOW.map(({ step: qs, field }) => {
+              if (!quoteData[field]) return null
+              return (
+                <div key={qs} className="mb-3">
+                  <div className="flex mb-1">
+                    <div className="w-6 h-6 bg-ng-pink rounded-full flex items-center justify-center mr-2 flex-shrink-0 mt-0.5"><span className="text-white text-[10px]">⛳</span></div>
+                    <div className="bg-white border border-gray-200 px-3 py-2 rounded-2xl rounded-bl-sm shadow-sm text-sm text-gray-800">{getQuoteQuestion(qs)}</div>
+                  </div>
+                  <div className="flex justify-end">
+                    <div className="bg-ng-pink text-white px-3 py-2 rounded-2xl rounded-br-sm text-sm">{quoteData[field]}</div>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Current question */}
+            {quoteStep !== 'done' && !leadSubmitted && (
+              <div className="mb-3">
+                <div className="flex mb-2">
+                  <div className="w-6 h-6 bg-ng-pink rounded-full flex items-center justify-center mr-2 flex-shrink-0 mt-0.5"><span className="text-white text-[10px]">⛳</span></div>
+                  <div className="bg-white border border-gray-200 px-3 py-2 rounded-2xl rounded-bl-sm shadow-sm text-sm text-gray-800">{getQuoteQuestion(quoteStep)}</div>
+                </div>
+
+                {/* Destination step — show chips */}
+                {quoteStep === 'destination' && (
+                  <div className="ml-8">
+                    {DESTINATION_OPTIONS.map((group) => (
+                      <div key={group.region} className="mb-2">
+                        <p className="text-[10px] font-bold text-ng-gray-mid uppercase tracking-wider mb-1">{group.region}</p>
+                        <div className="flex flex-wrap gap-1">
+                          {group.items.map((dest) => (
+                            <button key={dest} onClick={() => toggleQuoteDest(dest)} className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${quoteSelectedDests.includes(dest) ? 'bg-ng-pink text-white' : 'bg-gray-100 text-ng-dark hover:bg-gray-200'}`}>
+                              {dest}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    <input type="text" value={quoteInput} onChange={(e) => setQuoteInput(e.target.value)} placeholder={t('Eller skriv en destination...', 'Or type a destination...')} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink mt-2" />
+                    <button onClick={() => { const all = [...quoteSelectedDests, ...(quoteInput.trim() ? [quoteInput.trim()] : [])]; advanceQuote(all.length > 0 ? all.join(', ') : t('Aaben for forslag', 'Open to suggestions')); setQuoteSelectedDests([]); }} className="w-full mt-2 py-2 bg-ng-pink text-white rounded-lg font-bold text-sm">
+                      {quoteSelectedDests.length === 0 && !quoteInput.trim() ? t('Aaben for forslag', 'Open to suggestions') : t('Fortsaet', 'Continue')}
+                    </button>
+                  </div>
+                )}
+
+                {/* People step — quick buttons */}
+                {quoteStep === 'people' && (
+                  <div className="ml-8">
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {['1', '2', '3', '4', '5', '6', '8', '10', '12', '16', '20'].map(n => (
+                        <button key={n} onClick={() => advanceQuote(n)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-ng-dark hover:bg-ng-pink hover:text-white transition-all">{n}</button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input type="text" value={quoteInput} onChange={(e) => setQuoteInput(e.target.value)} placeholder={t('Andet antal...', 'Other number...')} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" onKeyDown={(e) => { if (e.key === 'Enter' && quoteInput.trim()) advanceQuote(quoteInput.trim()) }} />
+                      <button onClick={() => quoteInput.trim() && advanceQuote(quoteInput.trim())} className="px-4 py-2 bg-ng-pink text-white rounded-lg text-sm font-bold">OK</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Rounds step — quick buttons */}
+                {quoteStep === 'rounds' && (
+                  <div className="ml-8">
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {['1', '2', '3', '4', '5', '7'].map(n => (
+                        <button key={n} onClick={() => advanceQuote(n)} className="px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-ng-dark hover:bg-ng-pink hover:text-white transition-all">{n}</button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input type="text" value={quoteInput} onChange={(e) => setQuoteInput(e.target.value)} placeholder={t('Andet antal...', 'Other...')} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink" onKeyDown={(e) => { if (e.key === 'Enter' && quoteInput.trim()) advanceQuote(quoteInput.trim()) }} />
+                      <button onClick={() => quoteInput.trim() && advanceQuote(quoteInput.trim())} className="px-4 py-2 bg-ng-pink text-white rounded-lg text-sm font-bold">OK</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Generic text input for other steps */}
+                {!['destination', 'people', 'rounds', 'done'].includes(quoteStep) && (
+                  <div className="ml-8">
+                    <div className="flex gap-2">
+                      <input
+                        type={quoteStep === 'email' ? 'email' : quoteStep === 'phone' ? 'tel' : 'text'}
+                        value={quoteInput}
+                        onChange={(e) => setQuoteInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && (quoteInput.trim() || quoteStep === 'notes')) advanceQuote(quoteInput.trim() || '-') }}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-ng-pink"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => (quoteInput.trim() || quoteStep === 'notes') && advanceQuote(quoteInput.trim() || '-')}
+                        className="px-4 py-2 bg-ng-pink text-white rounded-lg text-sm font-bold"
+                      >
+                        {quoteStep === 'notes' && !quoteInput.trim() ? t('Spring over', 'Skip') : 'OK'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <button type="submit" className="w-full py-2.5 bg-ng-pink text-white rounded-lg font-bold text-sm">{t('Send foresporgsel', 'Submit request')}</button>
-            </form>
-            <button onClick={resetWidget} className="text-xs text-gray-400 mt-2 hover:text-gray-600 block mx-auto">{t('Tilbage', 'Back')}</button>
-          </div>
-        )}
-        {step === 'quote' && leadSubmitted && (
-          <div className="p-6 text-center">
-            <span className="text-3xl block mb-3">✅</span>
-            <p className="font-bold text-ng-dark mb-2">{t('Tak!', 'Thank you!')}</p>
-            <p className="text-sm text-ng-gray-mid mb-4">{t('Vi kontakter dig inden for 1 hverdag.', "We'll contact you within 1 business day.")}</p>
-            <button onClick={() => { resetWidget(); setLeadSubmitted(false) }} className="px-4 py-2 bg-ng-pink text-white rounded-lg text-sm font-bold">{t('OK', 'OK')}</button>
+            )}
+
+            {/* Done / submitted */}
+            {(quoteStep === 'done' || leadSubmitted) && (
+              <div className="text-center py-4">
+                <span className="text-3xl block mb-2">✅</span>
+                <p className="font-bold text-ng-dark text-sm mb-1">{t('Tak for din foresporgsel!', 'Thank you for your request!')}</p>
+                <p className="text-xs text-ng-gray-mid mb-3">{t('Vi kontakter dig inden for 1 hverdag paa', "We'll contact you within 1 business day at")} {quoteData.email}</p>
+                <p className="text-xs text-ng-gray-mid mb-3">{t('Du kan ogsaa ringe til os:', 'You can also call us:')} <a href="tel:+4524412240" className="text-ng-pink font-bold">+45 2441 2240</a></p>
+                <button onClick={resetWidget} className="px-4 py-2 bg-ng-pink text-white rounded-lg text-sm font-bold">{t('Tilbage til menu', 'Back to menu')}</button>
+              </div>
+            )}
           </div>
         )}
 
